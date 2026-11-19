@@ -16,7 +16,7 @@ use windows::Media::Control::{
 
 /// 一般公開用のデフォルト Discord Application ID (Client ID)
 /// 公開前にここをご自身の公開用 Application ID（数字のみ）に書き換えてください。
-const DEFAULT_CLIENT_ID: &str = "YOUR_PUBLIC_DISCORD_APPLICATION_ID";
+const DEFAULT_CLIENT_ID: &str = "1572840415328206920";
 
 /// Developer Portal の Art Assets に登録したアイコン名（ジャケット取得時は右下アイコンに使用）
 const DEFAULT_LARGE_IMAGE: &str = "ytm_logo";
