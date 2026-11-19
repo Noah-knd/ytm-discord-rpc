@@ -1,27 +1,12 @@
-# YouTube Music Discord RPC (Rust / Windows)
+YouTube Music Discord RPCWindows で YouTube Music（ブラウザ・PWA・ダウンロード済み楽曲の再生など）を聴いているときに、Spotify 連携のように Discord のプロフィールへ 「YouTube Music を再生中（Listening）」 として表示する軽量な Rust 製常駐アプリです。主な特徴インストーラーを実行するだけですぐ使える: 面倒な初期設定やコマンド操作は不要です。ジャケット画像を自動表示: 再生中の曲名・アーティスト名からジャケット画像を自動取得して表示します（見つからない曲やオフライン時はアイコンにフォールバックします）。再生バー（タイムスタンプ）対応: 曲の再生位置と残り時間をリアルタイムに表示し、一時停止・停止時は自動でステータスを消去します。軽量・安全設計: Discord クライアントを改造する Mod は使用せず、Windows 標準のメディア情報（SMTC）と Discord 公式のローカル IPC 通信のみで動作します。Windows 自動起動対応: インストール時に自動起動をオンにしておけば、PC を再起動しても自動でバックグラウンド常駐します。動作環境OS: Windows 10 / Windows 11（64-bit）Discord: Windows デスクトップアプリ版 Discord（ブラウザ版 Discord では動作しません）インストール方法Releases ページ（最新版） から ytm-discord-rpc-setup.exe をダウンロードします。ダウンロードした ytm-discord-rpc-setup.exe をダブルクリックしてインストールします。インストール途中で「Windows 起動時に自動でバックグラウンド起動する」にチェックを入れておくと便利です。デスクトップ版 Discord を起動し、左下の ユーザー設定（歯車アイコン） → アクティビティのプライバシー から 「現在のアクティビティをステータスに表示する」 がオンになっていることを確認します。YouTube Music で曲を再生すると、数秒後に Discord のプロフィールへ表示されます。「Windows によって PC が保護されました」と表示された場合本アプリは個人開発のオープンソースソフトウェアであり、有料のコード署名証明書を付与していないため、初回実行時に Microsoft Defender SmartScreen の警告画面が表示されることがあります。ソースコードはこのリポジトリで全公開しています。内容をご確認のうえ、警告画面の 「詳細情報」 → 「実行」 をクリックしてインストールを進めてください。よくある質問（FAQ）曲を再生しても Discord に表示されません以下の 4 点を確認してください。確認項目対処法Discord の種類ブラウザ版ではなく、インストール済みの Windows アプリ版 Discord を起動してください。オンライン状態Discord のステータスが「オンライン状態を表示しない」になっているとアクティビティは表示されません。プライバシー設定Discord の「アクティビティのプライバシー」で「現在のアクティビティをステータスに表示する」をオンにしてください。Windows のメディア認識再生中に Win + A（クイック設定）を開き、Windows 側のメディアパネルに曲名が表示されているか確認してください。解決しない場合は、Win + R キーを押して %LOCALAPPDATA%\Programs\ytm-discord-rpc を開き、ytm-discord-rpc.log の内容を確認してください。PC をシャットダウン・再起動しても自動で動きますか？はい。インストール時に「Windows 起動時に自動でバックグラウンド起動する」をオンにしていれば、PC 起動時に自動で裏側で立ち上がり、あとから Discord を開いて曲を流すだけで表示されます。特定のアプリ（YouTube Music のみ）に絞り込みたい / 自分のカスタム ID を使いたいスタートメニューの 「YouTube Music Discord RPC の設定 (config.txt)」（または %LOCALAPPDATA%\Programs\ytm-discord-rpc\config.txt）をメモ帳で編集し、アプリを再起動してください。# 自分で作成したカスタム Application ID で上書きしたい場合のみ入力
+CLIENT_ID=
 
-Windows のメディア情報（SMTC）から再生中の曲と再生時間を取得し、Discord に **「〜を再生中（Listening）」** として表示する軽量な自作 Rust 常駐アプリです。
+# アイコン名を変更したい場合のみ入力
+LARGE_IMAGE=
 
-## PCにRustを入れずに `setup.exe` を作る手順（GitHub Actions）
-
-1. **Discord アプリを作成して Application ID を取得**
-   - [Discord Developer Portal](https://discord.com/developers/applications) で「New Application」をクリックし、名前を `YouTube Music` にして作成します。
-   - 作成画面に表示される **Application ID**（数字の羅列）をコピーしておきます。
-   - （任意）左メニューの **Rich Presence -> Art Assets** でアイコン画像をアップロードし、名前を `ytm_logo` にするとジャケット枠に表示されます。
-
-2. **GitHub にこのフォルダ一式をアップロード**
-   - GitHub で新しいリポジトリ（Private でも可）を作成し、このプロジェクトの中身をそのままアップロード（push）します。
-
-3. **自動生成された `ytm-discord-rpc-setup.exe` をダウンロード**
-   - リポジトリ上部の **Actions** タブを開きます。
-   - **Build Windows Setup EXE** の実行が完了（緑のチェック）したらクリックし、ページ下部の **Artifacts** から `ytm-discord-rpc-setup` をダウンロード・解凍します。
-
-4. **インストールして完了**
-   - 中に入っている `ytm-discord-rpc-setup.exe` をダブルクリックします。
-   - インストール途中で **Discord Application ID** の入力欄が出るので、手順 1 でコピーした ID を貼り付けて完了します。
-   - デスクトップ版 Discord を起動した状態で YouTube Music を再生すると、ステータスに表示されます。
-
-## 設定の変更・ログの確認
-
-- スタートメニューの「**YouTube Music Discord RPC の設定 (config.txt)**」から、あとから `CLIENT_ID` や `APP_FILTERS` を変更できます。
-- 同じフォルダに `ytm-discord-rpc.log` が出力されるため、特定のアプリ（Chrome/Edge など）だけに絞りたい場合はログ内の `(app: ...)` の文字列を `APP_FILTERS=` に設定してください。
+# 対象アプリを絞り込む場合はカンマ区切りで指定（ログ内の app: の値を参照）
+# 例: APP_FILTERS=chrome,msedge,youtube
+APP_FILTERS=
+アンインストール方法Windows の 「設定」 → 「アプリ」 → 「インストールされているアプリ」 から YouTube Music Discord RPC を選んでアンインストールできます（自動起動の登録も同時に削除されます）。開発者向け（ソースからのビルド）cargo build --release
+インストーラー（dist/ytm-discord-rpc-setup.exe）を作成する場合は、Inno Setup 6 をインストールした状態で以下を実行します。iscc installer.iss
+免責事項本ソフトウェアは非公式のオープンソースプロジェクトであり、Google LLC、YouTube Music、および Discord Inc. とは一切関係ありません。
