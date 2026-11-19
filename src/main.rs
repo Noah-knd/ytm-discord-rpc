@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -58,12 +59,11 @@ impl Config {
                     }
                 }
             } else {
-                // config.txt が存在しない場合はテンプレートを生成
                 let template = "\
 # Discord Developer Portal の Application ID (Client ID) を入力してください
 CLIENT_ID=YOUR_DISCORD_APPLICATION_ID
 
-# Developer Portal の Art Assets に登録したアイコン名（不要な場合は空欄）
+# Developer Portal の Art Assets に登録したアイコン名（ジャケット取得時は右下アイコンに使用）
 LARGE_IMAGE=ytm_logo
 
 # 特定のアプリのみ監視したい場合はカンマ区切りで指定（空欄なら再生中のメディア全般を対象）
@@ -107,6 +107,69 @@ fn append_log(message: &str) {
     }
 }
 
+fn clean_artist_name(artist: &str) -> String {
+    artist.trim_end_matches(" - Topic").trim().to_string()
+}
+
+fn query_itunes_artwork(agent: &ureq::Agent, term: &str, country: &str) -> Option<String> {
+    let resp = agent
+        .get("https://itunes.apple.com/search")
+        .query("term", term)
+        .query("media", "music")
+        .query("entity", "song")
+        .query("limit", "1")
+        .query("country", country)
+        .call()
+        .ok()?;
+    let body = resp.into_string().ok()?;
+    let parsed: Value = serde_json::from_str(&body).ok()?;
+    let raw_url = parsed
+        .get("results")?
+        .as_array()?
+        .first()?
+        .get("artworkUrl100")?
+        .as_str()?;
+    Some(raw_url.replace("100x100bb", "512x512bb"))
+}
+
+fn fetch_artwork_url(
+    agent: &ureq::Agent,
+    cache: &mut HashMap<String, Option<String>>,
+    title: &str,
+    artist: &str,
+) -> Option<String> {
+    if title.is_empty() {
+        return None;
+    }
+
+    let key = format!("{title}\0{artist}");
+    if let Some(cached) = cache.get(&key) {
+        return cached.clone();
+    }
+
+    let term = if artist.is_empty() {
+        title.to_string()
+    } else {
+        format!("{title} {artist}")
+    };
+
+    let found = query_itunes_artwork(agent, &term, "JP")
+        .or_else(|| query_itunes_artwork(agent, &term, "US"))
+        .or_else(|| {
+            if !artist.is_empty() {
+                query_itunes_artwork(agent, title, "JP")
+            } else {
+                None
+            }
+        });
+
+    if cache.len() >= 200 {
+        cache.clear();
+    }
+    cache.insert(key, found.clone());
+    found
+}
+
 #[derive(Debug, Clone)]
 struct TrackInfo {
     app_id: String,
@@ -115,6 +178,7 @@ struct TrackInfo {
     album: String,
     start_unix_sec: Option<i64>,
     end_unix_sec: Option<i64>,
+    artwork_url: Option<String>,
 }
 
 impl TrackInfo {
@@ -165,7 +229,11 @@ impl DiscordIpc {
         self.send_frame(0, &payload)
     }
 
-    fn set_listening_activity(&mut self, track: &TrackInfo, large_image: &str) -> io::Result<()> {
+    fn set_listening_activity(
+        &mut self,
+        track: &TrackInfo,
+        fallback_logo: &str,
+    ) -> io::Result<()> {
         let mut activity = serde_json::Map::new();
         // ActivityType::Listening = 2
         activity.insert("type".to_string(), json!(2));
@@ -193,16 +261,28 @@ impl DiscordIpc {
             );
         }
 
-        if !large_image.is_empty() {
-            let large_text = if !track.album.is_empty() {
-                track.album.as_str()
-            } else {
-                "YouTube Music"
-            };
+        let large_text = if !track.album.is_empty() {
+            track.album.as_str()
+        } else if !track.title.is_empty() {
+            track.title.as_str()
+        } else {
+            "YouTube Music"
+        };
+
+        if let Some(art_url) = &track.artwork_url {
+            let mut assets = serde_json::Map::new();
+            assets.insert("large_image".to_string(), json!(art_url));
+            assets.insert("large_text".to_string(), json!(large_text));
+            if !fallback_logo.is_empty() {
+                assets.insert("small_image".to_string(), json!(fallback_logo));
+                assets.insert("small_text".to_string(), json!("YouTube Music"));
+            }
+            activity.insert("assets".to_string(), Value::Object(assets));
+        } else if !fallback_logo.is_empty() {
             activity.insert(
                 "assets".to_string(),
                 json!({
-                    "large_image": large_image,
+                    "large_image": fallback_logo,
                     "large_text": large_text,
                 }),
             );
@@ -322,7 +402,7 @@ fn read_playing_track(
     let app_id = session.SourceAppUserModelId()?.to_string();
     let props = session.TryGetMediaPropertiesAsync()?.get()?;
     let title = props.Title()?.to_string();
-    let artist = props.Artist()?.to_string();
+    let artist = clean_artist_name(&props.Artist()?.to_string());
     let album = props.AlbumTitle()?.to_string();
 
     if title.is_empty() && artist.is_empty() {
@@ -367,6 +447,7 @@ fn read_playing_track(
         album,
         start_unix_sec,
         end_unix_sec,
+        artwork_url: None,
     }))
 }
 
@@ -378,6 +459,10 @@ fn main() -> windows::core::Result<()> {
     }
 
     let manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync()?.get()?;
+    let http_agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(5))
+        .build();
+    let mut artwork_cache: HashMap<String, Option<String>> = HashMap::new();
     let mut ipc: Option<DiscordIpc> = None;
     let mut last_track: Option<TrackInfo> = None;
 
@@ -398,15 +483,24 @@ fn main() -> windows::core::Result<()> {
             }
         }
 
-        let current_track = read_playing_track(&manager, &config).unwrap_or(None);
+        let mut current_track = read_playing_track(&manager, &config).unwrap_or(None);
 
         if let Some(client) = ipc.as_mut() {
-            let result = match (&current_track, &last_track) {
+            let result = match (&mut current_track, &last_track) {
                 (Some(track), Some(prev)) if track.is_same_as(prev) => Ok(()),
                 (Some(track), _) => {
+                    track.artwork_url = fetch_artwork_url(
+                        &http_agent,
+                        &mut artwork_cache,
+                        &track.title,
+                        &track.artist,
+                    );
                     append_log(&format!(
-                        "Playing: {} - {} (app: {})",
-                        track.title, track.artist, track.app_id
+                        "Playing: {} - {} (art: {}, app: {})",
+                        track.title,
+                        track.artist,
+                        track.artwork_url.is_some(),
+                        track.app_id
                     ));
                     client.set_listening_activity(track, &config.large_image)
                 }
