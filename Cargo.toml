@@ -1,0 +1,18 @@
+[package]
+name = "ytm-discord-rpc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde_json = "1"
+windows = { version = "0.58", features = [
+    "Foundation",
+    "Foundation_Collections",
+    "Media_Control",
+] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
