@@ -17,7 +17,7 @@ Windows で YouTube Music（ブラウザ・PWA・ダウンロード済み楽曲�
 
 ## インストール方法
 
-1. **[Releases ページ（最新版）](https://www.google.com/search?q=https://github.com/Noah-knd/ytm-discord-rpc/releases/latest)** から **`ytm-discord-rpc-setup.exe`** をダウンロードします。
+1. **[Releases ページ（最新版）](https://github.com/Noah-knd/ytm-discord-rpc/releases/tag/v0.2.0)** から **`ytm-discord-rpc-setup.exe`** をダウンロードします。
 2. ダウンロードした `ytm-discord-rpc-setup.exe` をダブルクリックしてインストールします。
    - インストール途中で「Windows 起動時に自動でバックグラウンド起動する」にチェックを入れておくと便利です。
 3. デスクトップ版 Discord を起動し、左下の **ユーザー設定（歯車アイコン）** → **アクティビティのプライバシー** から **「現在のアクティビティをステータスに表示する」** がオンになっていることを確認します。
