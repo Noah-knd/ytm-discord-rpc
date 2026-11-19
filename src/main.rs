@@ -14,6 +14,13 @@ use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSessionPlaybackStatus,
 };
 
+/// 一般公開用のデフォルト Discord Application ID (Client ID)
+/// 公開前にここをご自身の公開用 Application ID（数字のみ）に書き換えてください。
+const DEFAULT_CLIENT_ID: &str = "YOUR_PUBLIC_DISCORD_APPLICATION_ID";
+
+/// Developer Portal の Art Assets に登録したアイコン名（ジャケット取得時は右下アイコンに使用）
+const DEFAULT_LARGE_IMAGE: &str = "ytm_logo";
+
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
 const TICKS_PER_SEC: i64 = 10_000_000;
 const WINDOWS_TO_UNIX_EPOCH_SECS: i64 = 11_644_473_600;
@@ -26,8 +33,12 @@ struct Config {
 
 impl Config {
     fn load() -> Self {
-        let mut client_id = env::var("DISCORD_CLIENT_ID").unwrap_or_default();
-        let mut large_image = String::from("ytm_logo");
+        let mut client_id = env::var("DISCORD_CLIENT_ID")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| DEFAULT_CLIENT_ID.to_string());
+        let mut large_image = DEFAULT_LARGE_IMAGE.to_string();
         let mut app_filters: Vec<String> = Vec::new();
 
         if let Some(cfg_path) = config_file_path() {
@@ -41,10 +52,10 @@ impl Config {
                         let key = k.trim();
                         let val = v.trim();
                         match key {
-                            "CLIENT_ID" if client_id.is_empty() => {
+                            "CLIENT_ID" if !val.is_empty() && val != "YOUR_DISCORD_APPLICATION_ID" => {
                                 client_id = val.to_string();
                             }
-                            "LARGE_IMAGE" => {
+                            "LARGE_IMAGE" if !val.is_empty() => {
                                 large_image = val.to_string();
                             }
                             "APP_FILTERS" => {
@@ -59,14 +70,16 @@ impl Config {
                     }
                 }
             } else {
+                // 上級者向けの任意設定ファイル（空欄のままでデフォルト設定が動作します）
                 let template = "\
-# Discord Developer Portal の Application ID (Client ID) を入力してください
-CLIENT_ID=YOUR_DISCORD_APPLICATION_ID
+# 通常は編集不要です（空欄のままアプリ内蔵のデフォルトIDで動作します）
+# 自分で作成したカスタムIDで上書きしたい場合のみ入力してください
+CLIENT_ID=
 
-# Developer Portal の Art Assets に登録したアイコン名（ジャケット取得時は右下アイコンに使用）
-LARGE_IMAGE=ytm_logo
+# アイコン名を変更したい場合のみ入力（空欄でデフォルトを使用）
+LARGE_IMAGE=
 
-# 特定のアプリのみ監視したい場合はカンマ区切りで指定（空欄なら再生中のメディア全般を対象）
+# 特定のアプリのみ監視したい場合はカンマ区切りで指定（空欄なら再生中のメディア全般）
 # 例: APP_FILTERS=chrome,msedge,youtube
 APP_FILTERS=
 ";
@@ -453,8 +466,8 @@ fn read_playing_track(
 
 fn main() -> windows::core::Result<()> {
     let config = Config::load();
-    if config.client_id.is_empty() || config.client_id == "YOUR_DISCORD_APPLICATION_ID" {
-        append_log("CLIENT_ID が未設定です。config.txt の CLIENT_ID を設定してください。");
+    if config.client_id.is_empty() || config.client_id == "YOUR_PUBLIC_DISCORD_APPLICATION_ID" {
+        append_log("DEFAULT_CLIENT_ID が未設定です。src/main.rs の DEFAULT_CLIENT_ID を設定してください。");
         return Ok(());
     }
 
